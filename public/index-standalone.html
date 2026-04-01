@@ -105,6 +105,45 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .av-thumb{width:50px;height:50px;border-radius:8px;border:1.5px solid var(--border);overflow:hidden;background:#E8EAF2;flex-shrink:0}
 .av-thumb img{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
 .av-hint{margin-top:5px;font-size:11px;color:var(--muted);line-height:1.4}
+/* Avatar tab switcher */
+.av-tabs{display:flex;gap:6px;margin-bottom:8px}
+.av-tab{
+  flex:1;padding:7px 10px;border-radius:7px;border:1.5px solid var(--border);
+  background:var(--s2);cursor:pointer;text-align:center;
+  font-family:var(--ff-body);font-size:11px;font-weight:600;color:var(--dim);
+  transition:all .18s
+}
+.av-tab:hover{border-color:rgba(92,107,192,.4);color:var(--indigo)}
+.av-tab.active{border-color:var(--indigo);background:rgba(92,107,192,.08);color:var(--indigo)}
+.av-panel{display:none}
+.av-panel.active{display:block}
+/* Upload drop zone */
+.av-upload-zone{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:7px;padding:16px 12px;
+  border:2px dashed rgba(92,107,192,.3);border-radius:9px;
+  background:var(--s2);cursor:pointer;transition:all .2s;
+  text-align:center;position:relative;overflow:hidden
+}
+.av-upload-zone:hover,.av-upload-zone.drag-over{
+  border-color:rgba(92,107,192,.6);background:rgba(92,107,192,.06)
+}
+.av-upload-zone input[type="file"]{
+  position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%
+}
+.av-upload-icon{font-size:22px;line-height:1}
+.av-upload-txt{font-size:12px;font-weight:600;color:var(--dim)}
+.av-upload-sub{font-size:10px;color:var(--muted)}
+.av-upload-name{font-size:11px;color:#38A169;font-weight:600;margin-top:2px;display:none}
+.av-upload-name.visible{display:block}
+/* Preview row shared */
+.av-preview-row{display:flex;align-items:center;gap:10px;margin-top:8px}
+.av-thumb-lg{
+  width:54px;height:54px;border-radius:9px;border:1.5px solid var(--border);
+  overflow:hidden;background:#E8EAF2;flex-shrink:0
+}
+.av-thumb-lg img{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
+.av-preview-status{font-size:11px;color:var(--muted);line-height:1.45}
 
 .divider{border:none;border-top:1px solid rgba(0,0,0,0.05);margin:16px 0}
 
@@ -623,12 +662,38 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       </div>
 
       <div class="fg">
-        <label>Avatar Image URL</label>
-        <div class="av-input-row">
-          <input type="text" id="f-avatar" placeholder="Paste image URL…" oninput="onAvatar()"/>
-          <div class="av-thumb"><img id="av-thumb-img" src="https://api.dicebear.com/8.x/bottts/svg?seed=concrete" alt=""/></div>
+        <label>Avatar</label>
+        <!-- Tab switcher -->
+        <div class="av-tabs">
+          <div class="av-tab active" id="tab-url" onclick="switchAvTab('url')">🔗 Paste URL</div>
+          <div class="av-tab" id="tab-file" onclick="switchAvTab('file')">📁 Upload File</div>
         </div>
-        <div class="av-hint">💡 On X: right-click profile photo → <em>"Copy image address"</em> → paste above</div>
+
+        <!-- URL panel -->
+        <div class="av-panel active" id="avp-url">
+          <div class="av-input-row">
+            <input type="text" id="f-avatar" placeholder="Paste image URL…" oninput="onAvatar()"/>
+          </div>
+          <div class="av-hint">💡 On X: right-click profile photo → <em>"Copy image address"</em> → paste above</div>
+        </div>
+
+        <!-- File upload panel -->
+        <div class="av-panel" id="avp-file">
+          <div class="av-upload-zone" id="av-drop-zone"
+               ondragover="avDragOver(event)" ondragleave="avDragLeave(event)" ondrop="avDrop(event)">
+            <input type="file" id="f-avatar-file" accept="image/*" onchange="onAvatarFile(event)"/>
+            <div class="av-upload-icon">🖼</div>
+            <div class="av-upload-txt">Click to choose or drag & drop</div>
+            <div class="av-upload-sub">PNG, JPG, GIF, WEBP — any size</div>
+          </div>
+          <div class="av-upload-name" id="av-file-name"></div>
+        </div>
+
+        <!-- Shared preview -->
+        <div class="av-preview-row">
+          <div class="av-thumb-lg"><img id="av-thumb-img" src="https://api.dicebear.com/8.x/bottts/svg?seed=concrete" alt=""/></div>
+          <div class="av-preview-status" id="av-status">No avatar set — a default will be generated from your name.</div>
+        </div>
       </div>
 
       <div class="divider"></div>
@@ -884,21 +949,94 @@ function setSocial(v){
   document.getElementById('ico-discord').classList.toggle('selected',v==='discord');
 }
 
-/* ── Avatar ── */
+/* ── Avatar tab switching ── */
+function switchAvTab(tab){
+  document.getElementById('tab-url').classList.toggle('active', tab==='url');
+  document.getElementById('tab-file').classList.toggle('active', tab==='file');
+  document.getElementById('avp-url').classList.toggle('active', tab==='url');
+  document.getElementById('avp-file').classList.toggle('active', tab==='file');
+  // Clear the other source when switching
+  if(tab==='url'){
+    // Reset file upload state but keep currentAvatar if URL is set
+    var urlVal=document.getElementById('f-avatar').value.trim();
+    if(!urlVal){ setAvatarFallback(); }
+  } else {
+    // Switching to file — if no file yet keep current
+  }
+}
+
+/* ── Set fallback (generated) avatar ── */
+function setAvatarFallback(){
+  var seed=encodeURIComponent(document.getElementById('f-name').value.trim()||'concrete');
+  var fb='https://api.dicebear.com/8.x/bottts/svg?seed='+seed;
+  document.getElementById('av-thumb-img').src=fb;
+  currentAvatar=fb;
+  setAvStatus('No avatar set — a default will be generated from your name.', false);
+}
+
+/* ── Update status text ── */
+function setAvStatus(msg, ok){
+  var el=document.getElementById('av-status');
+  if(el){ el.textContent=msg; el.style.color=ok?'#38A169':'var(--muted)'; }
+}
+
+/* ── URL input ── */
 function onAvatar(){
   var v=document.getElementById('f-avatar').value.trim();
   var thumb=document.getElementById('av-thumb-img');
   if(v){
     var img=new Image();
     img.crossOrigin='anonymous';
-    img.onload=function(){thumb.src=v;currentAvatar=v;};
-    img.onerror=function(){};
+    img.onload=function(){
+      thumb.src=v; currentAvatar=v;
+      setAvStatus('✓ URL image loaded', true);
+    };
+    img.onerror=function(){
+      setAvStatus('⚠ Could not load this URL — check the address', false);
+    };
     img.src=v;
   } else {
-    var seed=encodeURIComponent(document.getElementById('f-name').value.trim()||'concrete');
-    var fb='https://api.dicebear.com/8.x/bottts/svg?seed='+seed;
-    thumb.src=fb; currentAvatar=fb;
+    setAvatarFallback();
   }
+}
+
+/* ── File upload ── */
+function onAvatarFile(e){
+  var file=e.target.files&&e.target.files[0];
+  if(!file) return;
+  applyAvatarFile(file);
+}
+
+function applyAvatarFile(file){
+  if(!file.type.startsWith('image/')){
+    setAvStatus('⚠ Please select an image file', false); return;
+  }
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    var dataUrl=ev.target.result;
+    currentAvatar=dataUrl;
+    document.getElementById('av-thumb-img').src=dataUrl;
+    var nameEl=document.getElementById('av-file-name');
+    if(nameEl){ nameEl.textContent='✓ '+file.name; nameEl.classList.add('visible'); }
+    setAvStatus('✓ '+file.name+' loaded', true);
+  };
+  reader.onerror=function(){ setAvStatus('⚠ Could not read file', false); };
+  reader.readAsDataURL(file);
+}
+
+/* ── Drag and drop ── */
+function avDragOver(e){
+  e.preventDefault();
+  document.getElementById('av-drop-zone').classList.add('drag-over');
+}
+function avDragLeave(e){
+  document.getElementById('av-drop-zone').classList.remove('drag-over');
+}
+function avDrop(e){
+  e.preventDefault();
+  document.getElementById('av-drop-zone').classList.remove('drag-over');
+  var file=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];
+  if(file) applyAvatarFile(file);
 }
 
 /* ── Role change ── */
@@ -951,14 +1089,16 @@ var ICONS={
   discord:'<path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057.1 18.079.118 18.1.138 18.11a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" fill="white"/>'
 };
 
-/* ── Live form update (no card on page 1, just sync avatar thumb) ── */
+/* ── Live form update ── */
 function formUpd(){
-  // Just keep avatar thumb in sync with name for default avatar
+  // If no avatar set yet, regenerate default from name
   var avUrl=document.getElementById('f-avatar').value.trim();
-  if(!avUrl){
+  var hasFile=currentAvatar&&currentAvatar.startsWith('data:');
+  if(!avUrl&&!hasFile){
     var seed=encodeURIComponent(document.getElementById('f-name').value.trim()||'concrete');
-    document.getElementById('av-thumb-img').src='https://api.dicebear.com/8.x/bottts/svg?seed='+seed;
-    currentAvatar='https://api.dicebear.com/8.x/bottts/svg?seed='+seed;
+    var fb='https://api.dicebear.com/8.x/bottts/svg?seed='+seed;
+    document.getElementById('av-thumb-img').src=fb;
+    currentAvatar=fb;
   }
 }
 
@@ -983,7 +1123,9 @@ function generateCard(){
   // ── Populate reveal card ──
   document.getElementById('rv-name').textContent=name;
 
-  var avSrc=document.getElementById('f-avatar').value.trim()||currentAvatar||('https://api.dicebear.com/8.x/bottts/svg?seed='+encodeURIComponent(name));
+  /* Use uploaded file (data: URL) first, then pasted URL, then fallback */
+  var hasUpload=currentAvatar&&currentAvatar.startsWith('data:');
+  var avSrc=hasUpload?currentAvatar:(document.getElementById('f-avatar').value.trim()||currentAvatar||('https://api.dicebear.com/8.x/bottts/svg?seed='+encodeURIComponent(name)));
   document.getElementById('rv-avatar').src=avSrc;
   var bgEl=document.getElementById('rv-avatar-bg');
   if(bgEl){ bgEl.src=avSrc; bgEl.crossOrigin='anonymous'; }
