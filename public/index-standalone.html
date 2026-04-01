@@ -152,8 +152,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 #page-reveal{background:radial-gradient(ellipse at 50% 40%,#1a1d3a 0%,#0a0b14 100%)}
 #page-reveal .body{
   flex:1;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;
-  padding:32px 20px 48px;gap:24px
+  align-items:center;justify-content:flex-start;
+  padding:24px 16px 60px;gap:20px;
+  overflow-y:auto;-webkit-overflow-scrolling:touch
 }
 
 /* card reveal animation */
@@ -584,6 +585,12 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   .form-panel{border-right:none;border-bottom:1px solid rgba(0,0,0,.05)}
   .preview-placeholder{width:280px;height:373px}
 }
+@media(max-width:600px){
+  #card-reveal-instance,#card-preview-instance{--cw:min(340px,92vw)}
+  .reveal-actions{opacity:1!important;transform:none!important;transition:none!important;flex-direction:row;flex-wrap:wrap}
+  .ra-btn{font-size:11px;padding:10px 14px}
+  #page-reveal .body{padding:16px 12px 80px;justify-content:flex-start}
+}
 </style>
 </head>
 <body>
@@ -635,7 +642,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
           <option value="Chief Growth Officer">Chief Growth Officer</option>
           <option value="Head of Marketing">Head of Marketing</option>
           <option value="Community Lead">Community Lead</option>
-          <option value="Moderator" selected>Moderator</option>
+          <option value="" disabled selected>— Select a role —</option>
+          <option value="Moderator">Moderator</option>
           <option value="Moai">Moai</option>
           <option value="Access">Access</option>
           <option value="Grindoor">Grindoor</option>
@@ -651,12 +659,12 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 
       <div class="fg">
         <label>Role Sub-tags / Title</label>
-        <input type="text" id="f-subtags" value="DeFi Strategist • CM • MOD • Vibes Officer" oninput="formUpd()"/>
+        <input type="text" id="f-subtags" placeholder="All in on Concrete" oninput="formUpd()"/>
       </div>
 
       <div class="fg">
         <label>Bio</label>
-        <textarea id="f-bio" oninput="formUpd()">Maintaining structure and driving community excellence: blending research, moderation, and engagement to build a high-quality DeFi ecosystem across Web3.</textarea>
+        <textarea id="f-bio" oninput="formUpd()" placeholder="Simple human being |Ex Community Moderator @Litmarketplace |Contributor @ConcreteXYZ | Prev Ambassador @lanca_io | Member @Ctghub"></textarea>
       </div>
 
       <div class="divider"></div>
@@ -672,7 +680,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         </div>
         <div class="fg">
           <label>Rank #</label>
-          <input type="text" id="f-rank" placeholder="e.g. 42" value="1" oninput="formUpd()"/>
+          <input type="text" id="f-rank" placeholder="e.g. 42" oninput="formUpd()"/>
         </div>
       </div>
 
@@ -895,15 +903,24 @@ function onAvatar(){
 
 /* ── Role change ── */
 function onRole(){
-  var c=cfg();
+  var roleVal=document.getElementById('f-role').value;
   var tp=document.getElementById('ri-tier');
+  var descEl=document.getElementById('ri-desc');
+  var box=document.getElementById('ri-box');
+  if(!roleVal){
+    tp.textContent='—'; tp.style.background=''; tp.style.color='#aaa'; tp.style.borderColor='#ddd';
+    descEl.textContent='Select a role to see details';
+    box.style.borderColor='var(--border)';
+    return;
+  }
+  var c=cfg();
   tp.textContent=c.tier;
   tp.style.background=c.tb; tp.style.color=c.ac; tp.style.borderColor=c.tbr;
-  document.getElementById('ri-desc').textContent=c.desc;
-  document.getElementById('ri-box').style.borderColor=c.tbr;
+  descEl.textContent=c.desc;
+  box.style.borderColor=c.tbr;
 }
 
-function cfg(){return RC[document.getElementById('f-role').value]||RC['Newbie'];}
+function cfg(){var v=document.getElementById('f-role').value;return v&&RC[v]?RC[v]:RC['Newbie'];}
 
 /* ── Barcode ── */
 function drawBarcode(svgId){
@@ -949,11 +966,11 @@ function formUpd(){
 function generateCard(){
   var name   =(document.getElementById('f-name').value||'CONCRETE').toUpperCase();
   var role   = document.getElementById('f-role').value;
-  var subtags= document.getElementById('f-subtags').value;
-  var bio    = document.getElementById('f-bio').value;
+  var subtags= document.getElementById('f-subtags').value.trim();
+  var bio    = document.getElementById('f-bio').value.trim();
   var flws   = document.getElementById('f-flws').value.trim()||'—';
   var flwing = document.getElementById('f-flwing').value.trim()||'—';
-  var rank   = document.getElementById('f-rank').value.trim()||'1';
+  var rank   = document.getElementById('f-rank').value.trim()||'—';
   var c      = cfg();
 
   // Bump tier serial counter
@@ -1030,22 +1047,29 @@ function generateCard(){
   actions.classList.remove('visible');
   document.getElementById('rv-tier').classList.remove('lit');
 
-  // Play a sound effect
+  // Play a sound effect (iOS-safe: resume AudioContext within user gesture)
   try{
-    var ctx=new(window.AudioContext||window.webkitAudioContext)();
-    // Holographic swipe: descending + rising tones
-    var times=[[0,.08,440,0.3],[.05,.12,660,.25],[.1,.2,880,.2],[.2,.35,1100,.15],[.35,.5,550,.1]];
-    times.forEach(function(t){
-      var osc=ctx.createOscillator();
-      var gain=ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.type='sine'; osc.frequency.value=t[2];
-      gain.gain.setValueAtTime(0,ctx.currentTime+t[0]);
-      gain.gain.linearRampToValueAtTime(t[3],ctx.currentTime+t[0]+0.03);
-      gain.gain.linearRampToValueAtTime(0,ctx.currentTime+t[1]);
-      osc.start(ctx.currentTime+t[0]);
-      osc.stop(ctx.currentTime+t[1]+0.1);
-    });
+    var actx=new(window.AudioContext||window.webkitAudioContext)();
+    // Resume is required on iOS Safari — must be called synchronously in the gesture handler
+    var playFn=function(){
+      var times=[[0,.08,440,0.3],[.05,.12,660,.25],[.1,.2,880,.2],[.2,.35,1100,.15],[.35,.5,550,.1]];
+      times.forEach(function(t){
+        var osc=actx.createOscillator();
+        var gain=actx.createGain();
+        osc.connect(gain); gain.connect(actx.destination);
+        osc.type='sine'; osc.frequency.value=t[2];
+        gain.gain.setValueAtTime(0,actx.currentTime+t[0]);
+        gain.gain.linearRampToValueAtTime(t[3],actx.currentTime+t[0]+0.03);
+        gain.gain.linearRampToValueAtTime(0,actx.currentTime+t[1]);
+        osc.start(actx.currentTime+t[0]);
+        osc.stop(actx.currentTime+t[1]+0.1);
+      });
+    };
+    if(actx.state==='suspended'){
+      actx.resume().then(playFn).catch(function(){});
+    } else {
+      playFn();
+    }
   }catch(e){}
 
   setTimeout(function(){wrap.classList.add('revealed');},80);
@@ -1088,12 +1112,18 @@ function dlCard(){
     // which makes the exported card larger than the live card.
     // Without them, html2canvas reads the card's actual CSS dimensions (370px)
     // and renders those exact pixels — then scale:2 just makes them sharper.
+    // Scroll the card into full view before capture (fixes Vercel offset)
+    card.scrollIntoView({block:'nearest'});
+    var rect2=card.getBoundingClientRect();
     return html2canvas(card,{
       backgroundColor:null,
-      scale:2,                 // 2x sharpness — does NOT change layout size
+      scale:2,
       useCORS:true,
       allowTaint:true,
       logging:false,
+      x:0,y:0,
+      scrollX:-Math.round(rect2.left),
+      scrollY:-Math.round(rect2.top),
       onclone:function(doc,clonedEl){
         // Kill all animations in the clone
         var style=doc.createElement('style');
